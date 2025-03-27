@@ -1,8 +1,8 @@
 // trickle APIのバックエンド連携ラッパー
 // バックエンドのAPIエンドポイントを呼び出す実装に置き換え
 
-// APIのベースURL（相対パスで指定して本番環境でも動作するようにする）
-const API_BASE_URL = '/api';
+// APIのベースURL（環境に応じて自動判別）
+const API_BASE_URL = window.location.hostname === 'localhost' ? 'http://localhost:3001/api' : '/api';
 
 // 管理者認証トークンの保存
 let adminToken = null;
@@ -17,15 +17,45 @@ async function trickleListObjects(type) {
     // オブジェクトタイプに基づいてエンドポイントを決定
     const endpoint = getEndpointForType(type);
     
-    // APIリクエスト実行
-    const response = await fetch(`${API_BASE_URL}/${endpoint}`);
+    // リクエスト失敗時のフォールバック処理を実装
+    let retries = 3;
+    let response;
     
-    if (!response.ok) {
-      throw new Error(`APIエラー: ${response.status} ${response.statusText}`);
+    while (retries > 0) {
+      try {
+        // APIリクエスト実行
+        response = await fetch(`${API_BASE_URL}/${endpoint}`, {
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`APIエラー: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        console.error(`${type}一覧取得エラー、リトライ中 (${retries}):`, error);
+        retries--;
+        
+        if (retries === 0) {
+          // リトライが尽きた場合はフォールバックデータを返す
+          if (type === 'user' && window.initialUsersData) {
+            return { items: [...window.initialUsersData] };
+          } else if (type === 'equipment') {
+            return { items: [] };
+          } else if (type === 'reservation') {
+            return { items: [] };
+          }
+        }
+        
+        // 次のリトライの前に少し待機
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
     }
-    
-    const data = await response.json();
-    return data;
   } catch (error) {
     console.error(`${type}一覧取得エラー:`, error);
     throw error;

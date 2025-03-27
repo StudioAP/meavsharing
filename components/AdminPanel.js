@@ -8,8 +8,8 @@ function AdminPanel({
     onDeleteEquipment
 }) {
     try {
-        const [password, setPassword] = React.useState('');
-        const [isAuthenticated, setIsAuthenticated] = React.useState(false);
+        // Navbar.jsで既に認証されているので、ここでは自動的に認証済みとする
+        const [isAuthenticated, setIsAuthenticated] = React.useState(true);
         
         const today = dayjs().tz('Asia/Tokyo').startOf('day');
         
@@ -41,43 +41,7 @@ function AdminPanel({
             }
         };
 
-        const handleLogin = (e) => {
-            e.preventDefault();
-            if (password === 'kangoiryo') {
-                setIsAuthenticated(true);
-            } else {
-                alert('パスワードが間違っています');
-                setPassword('');
-            }
-        };
-
-        if (!isAuthenticated) {
-            return (
-                <div className="admin-panel">
-                    <h3 className="text-lg font-semibold mb-4">管理者ログイン</h3>
-                    <form onSubmit={handleLogin}>
-                        <div className="mb-4">
-                            <label className="form-label">パスワード</label>
-                            <input
-                                data-name="admin-password-input"
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="form-input"
-                                required
-                            />
-                        </div>
-                        <button
-                            data-name="admin-login-button"
-                            type="submit"
-                            className="form-button bg-blue-500 hover:bg-blue-600 text-white"
-                        >
-                            ログイン
-                        </button>
-                    </form>
-                </div>
-            );
-        }
+        // Navbarで既に認証済みなので、ログイン処理は不要
 
         return (
             <div className="space-y-6">

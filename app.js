@@ -9,6 +9,26 @@ function App() {
         const [reservations, setReservations] = React.useState([]);
 
         // 初期ユーザーデータ - 16名の利用者情報
+        // グローバル変数に設定してAPI接続エラー時にフォールバックできるようにする
+        window.initialUsersData = [
+            { name: '大西 英文', kana: 'おおにしひでふみ', department: '検査' },
+            { name: '小川 敦之', kana: 'おがわあつゆき', department: '作業' },
+            { name: '甲斐 絡元', kana: 'かいひろもと', department: '理学' },
+            { name: '木村 智子', kana: 'きむらともこ', department: '理学' },
+            { name: '小山 智恵', kana: 'こやまともえ', department: '看護' },
+            { name: '齋藤 慶一郎', kana: 'さいとうけいいちろう', department: '作業' },
+            { name: '薛摩 恵人', kana: 'さつまけいと', department: '理学' },
+            { name: '所司 雄文', kana: 'しょうじかつふみ', department: '検査' },
+            { name: '菅沼 一平', kana: 'すがぬまいっぺい', department: '作業' },
+            { name: '高畔 進一', kana: 'たかはたしんいち', department: '作業' },
+            { name: '平井 秀明', kana: 'ひらいひであき', department: '作業' },
+            { name: '野島 敦祐', kana: 'のじまとしすけ', department: '看護' },
+            { name: '原田 拓実', kana: 'はらだたくみ', department: '作業' },
+            { name: '藤原 麻有', kana: 'ふじわらまゆ', department: '検査' },
+            { name: '深山 つかさ', kana: 'みやまつかさ', department: '看護' },
+            { name: '横山 高明', kana: 'よこやまたかあき', department: '理学' }
+        ];
+        
         const initialUsers = [
             { name: '大西 英文', kana: 'おおにしひでふみ', department: '検査' },
             { name: '小川 敦之', kana: 'おがわあつゆき', department: '作業' },
@@ -46,6 +66,7 @@ function App() {
                     });
                     
                     // 初期ユーザーデータを登録（存在しない場合のみ）
+                    // 全てのユーザーは後で削除可能
                     const userCreationPromises = [];
                     for (const user of initialUsers) {
                         if (!existingUsers.has(user.kana)) {
@@ -53,7 +74,8 @@ function App() {
                                 trickleCreateObject('user', {
                                     ...user,
                                     id: Date.now() + Math.random().toString(36).substring(2, 9),
-                                    createdAt: new Date().toISOString()
+                                    createdAt: new Date().toISOString(),
+                                    isRemovable: true // 削除可能フラグを追加
                                 })
                             );
                         }
