@@ -1,0 +1,43 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "crons": [
+    {
+      "path": "/api/ping",
+      "schedule": "*/5 * * * *"
+    }
+  ],
+  "functions": {
+    "app/api/ping/route.js": {
+      "memory": 128
+    }
+  },
+  "regions": ["iad1"],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Credentials", "value": "true" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET,OPTIONS,PATCH,DELETE,POST,PUT" },
+        { "key": "Access-Control-Allow-Headers", "value": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization" }
+      ]
+    }
+  ],
+  "env": {
+    "NEXT_PUBLIC_APP_ENV": "production"
+  }
+}
+
+/**
+ * 注意点:
+ * - Cronジョブは "*/5 * * * *" で5分ごとに実行
+ * - Vercelの無料枠では月100回までのCron実行が上限
+ *   → 5分間隔だと1日で288回になり、無料枠では3日以内に上限に達する
+ *   → 本番環境では "0 */1 * * *" (1時間ごと) や "0 */2 * * *" (2時間ごと) に変更することを推奨
+ * 
+ * 処理内容:
+ * - /api/ping エンドポイントを定期的に呼び出し
+ * - Neonデータベースとの接続を維持するためのpingを実行
+ * - データベースのコールドスタートを防ぎ、アプリケーションの応答速度を向上
+ */
