@@ -6,7 +6,23 @@
       "use": "@vercel/node"
     },
     {
-      "src": "**/*.html",
+      "src": "*.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "components/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "utils/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "styles/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "app.js",
       "use": "@vercel/static"
     }
   ],
@@ -16,8 +32,24 @@
       "dest": "server/server.js"
     },
     {
+      "src": "/components/(.*)",
+      "dest": "/components/$1"
+    },
+    {
+      "src": "/utils/(.*)",
+      "dest": "/utils/$1"
+    },
+    {
+      "src": "/styles/(.*)",
+      "dest": "/styles/$1"
+    },
+    {
+      "src": "/app.js",
+      "dest": "/app.js"
+    },
+    {
       "src": "/(.*)",
-      "dest": "/$1.html"
+      "dest": "/$1"
     }
   ],
   "env": {
