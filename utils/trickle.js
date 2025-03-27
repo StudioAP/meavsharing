@@ -1,8 +1,8 @@
 // trickle APIのバックエンド連携ラッパー
 // バックエンドのAPIエンドポイントを呼び出す実装に置き換え
 
-// APIのベースURL（本番環境では環境変数から取得）
-const API_BASE_URL = 'http://localhost:3001/api';
+// APIのベースURL（相対パスで指定して本番環境でも動作するようにする）
+const API_BASE_URL = '/api';
 
 // 管理者認証トークンの保存
 let adminToken = null;

@@ -8,6 +8,26 @@ function App() {
         const [equipment, setEquipment] = React.useState([]);
         const [reservations, setReservations] = React.useState([]);
 
+        // 初期ユーザーデータ - 16名の利用者情報
+        const initialUsers = [
+            { name: '大西 英文', kana: 'おおにしひでふみ', department: '検査' },
+            { name: '小川 敦之', kana: 'おがわあつゆき', department: '作業' },
+            { name: '甲斐 絋元', kana: 'かいひろもと', department: '理学' },
+            { name: '木村 智子', kana: 'きむらともこ', department: '理学' },
+            { name: '小山 智恵', kana: 'こやまともえ', department: '看護' },
+            { name: '齋藤 慶一郎', kana: 'さいとうけいいちろう', department: '作業' },
+            { name: '薩摩 恵人', kana: 'さつまけいと', department: '理学' },
+            { name: '所司 雄文', kana: 'しょうじかつふみ', department: '検査' },
+            { name: '菅沼 一平', kana: 'すがぬまいっぺい', department: '作業' },
+            { name: '高畑 進一', kana: 'たかはたしんいち', department: '作業' },
+            { name: '平井 秀明', kana: 'ひらいひであき', department: '作業' },
+            { name: '野島 敏祐', kana: 'のじまとしすけ', department: '看護' },
+            { name: '原田 拓実', kana: 'はらだたくみ', department: '作業' },
+            { name: '藤原 麻有', kana: 'ふじわらまゆ', department: '検査' },
+            { name: '深山 つかさ', kana: 'みやまつかさ', department: '看護' },
+            { name: '横山 高明', kana: 'よこやまたかあき', department: '理学' }
+        ];
+
         // データ読み込み
         React.useEffect(() => {
             async function loadData() {
@@ -18,12 +38,44 @@ function App() {
                         trickleListObjects('reservation')
                     ]);
 
-                    // ふりがなの５０音順でソート
-                    const sortedUsers = usersRes.items
-                        .map(item => item.objectData)
-                        .sort((a, b) => a.kana.localeCompare(b.kana, 'ja'));
+                    // 既存ユーザーをマップとして取得
+                    const existingUsers = new Map();
+                    usersRes.items.forEach(item => {
+                        const user = item.objectData;
+                        existingUsers.set(user.kana, user);
+                    });
                     
-                    setUsers(sortedUsers);
+                    // 初期ユーザーデータを登録（存在しない場合のみ）
+                    const userCreationPromises = [];
+                    for (const user of initialUsers) {
+                        if (!existingUsers.has(user.kana)) {
+                            userCreationPromises.push(
+                                trickleCreateObject('user', {
+                                    ...user,
+                                    id: Date.now() + Math.random().toString(36).substring(2, 9),
+                                    createdAt: new Date().toISOString()
+                                })
+                            );
+                        }
+                    }
+                    
+                    if (userCreationPromises.length > 0) {
+                        await Promise.all(userCreationPromises);
+                        // ユーザーリストを再取得
+                        const updatedUsersRes = await trickleListObjects('user');
+                        // ふりがなの５０音順でソート
+                        const sortedUsers = updatedUsersRes.items
+                            .map(item => item.objectData)
+                            .sort((a, b) => a.kana.localeCompare(b.kana, 'ja'));
+                        setUsers(sortedUsers);
+                    } else {
+                        // ふりがなの５０音順でソート
+                        const sortedUsers = usersRes.items
+                            .map(item => item.objectData)
+                            .sort((a, b) => a.kana.localeCompare(b.kana, 'ja'));
+                        setUsers(sortedUsers);
+                    }
+                    
                     setEquipment(equipmentRes.items.map(item => item.objectData));
                     setReservations(reservationsRes.items.map(item => item.objectData));
 

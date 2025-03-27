@@ -11,8 +11,12 @@ function ReservationForm({ selectedDate, users, equipment, onReservationSubmit, 
             { id: 'lunch', label: '昼休み' },
             { id: '3', label: '3講時' },
             { id: '4', label: '4講時' },
-            { id: '5', label: '5講時' }
+            { id: '5', label: '5講時' },
+            { id: 'overnight', label: '翌日まで' }
         ];
+        
+        // 時間枠の順序を管理する配列
+        const timeSlotOrder = ['1', '2', 'lunch', '3', '4', '5', 'overnight'];
 
         const handleSubmit = async (e) => {
             e.preventDefault();
@@ -20,14 +24,31 @@ function ReservationForm({ selectedDate, users, equipment, onReservationSubmit, 
                 alert('利用者、備品、講時をすべて選択してください');
                 return;
             }
+            
+            // 連続していない講時が選択されていないか確認
+            if (!areTimeSlotsConsecutive(selectedTimeSlots)) {
+                alert('連続する講時のみ選択できます');
+                return;
+            }
+            
+            // 同じ備品が既に予約されていないか確認
+            if (isReservationConflict(selectedEquipment, selectedTimeSlots, selectedDate)) {
+                alert('選択した時間帯に同じ備品が既に予約されています');
+                return;
+            }
 
             setIsSubmitting(true);
             try {
+                // タイムスロットを順序通りにソート
+                const sortedTimeSlots = [...selectedTimeSlots].sort((a, b) => {
+                    return timeSlotOrder.indexOf(a) - timeSlotOrder.indexOf(b);
+                });
+                
                 const success = await onReservationSubmit({
                     date: selectedDate,
                     userId: selectedUser,
                     equipmentId: selectedEquipment,
-                    timeSlots: selectedTimeSlots.sort()
+                    timeSlots: sortedTimeSlots
                 });
 
                 if (success) {
@@ -43,13 +64,58 @@ function ReservationForm({ selectedDate, users, equipment, onReservationSubmit, 
             }
         };
 
+        // 連続講時のみ選択可能にする判定関数
+        const areTimeSlotsConsecutive = (slots) => {
+            if (slots.length <= 1) return true;
+            
+            // 選択された時間枠を指定された順序に基づいてソート
+            const sortedSlots = [...slots].sort((a, b) => {
+                return timeSlotOrder.indexOf(a) - timeSlotOrder.indexOf(b);
+            });
+            
+            // 連続しているか確認
+            for (let i = 1; i < sortedSlots.length; i++) {
+                const prevIndex = timeSlotOrder.indexOf(sortedSlots[i-1]);
+                const currIndex = timeSlotOrder.indexOf(sortedSlots[i]);
+                
+                if (currIndex - prevIndex !== 1) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        
+        // 予約重複をチェックする関数
+        const isReservationConflict = (equipmentId, timeSlots, date) => {
+            if (!reservations || !equipmentId || !timeSlots.length) return false;
+            
+            return reservations.some(reservation => {
+                if (reservation.equipmentId !== equipmentId) return false;
+                if (reservation.date !== date) return false;
+                
+                // 同じ日、同じ備品で、時間枠が重複しているか確認
+                return reservation.timeSlots.some(slot => timeSlots.includes(slot));
+            });
+        };
+        
         const handleTimeSlotToggle = (slotId) => {
             setSelectedTimeSlots(prev => {
+                let newSlots;
                 if (prev.includes(slotId)) {
-                    return prev.filter(id => id !== slotId);
+                    // スロットを削除
+                    newSlots = prev.filter(id => id !== slotId);
                 } else {
-                    return [...prev, slotId];
+                    // 新しいスロットを追加
+                    newSlots = [...prev, slotId];
+                    
+                    // 連続していない場合は警告を表示
+                    if (!areTimeSlotsConsecutive(newSlots)) {
+                        alert('連続する講時のみ選択できます');
+                        return prev; // 元の選択状態を維持
+                    }
                 }
+                
+                return newSlots;
             });
         };
 
