@@ -52,71 +52,117 @@ function App() {
         React.useEffect(() => {
             async function loadData() {
                 try {
-                    // window.initialUsersDataからユーザーデータを事前準備
-                    if (!window.processedUsers) {
-                        // 初期化する前に一度だけ実行
-                        window.processedUsers = window.initialUsersData.map(userData => ({
-                            ...userData,
-                            id: `init_user_${userData.kana}_${Math.random().toString(36).substring(2, 9)}`,
-                            createdAt: new Date().toISOString(),
-                            isRemovable: true
-                        }));
-                    }
-
+                    // APIリクエスト結果を保存する変数
+                    let usersRes, equipmentRes, reservationsRes;
+                    
                     try {
-                        // APIからデータ取得を試行
-                        const [usersRes, equipmentRes, reservationsRes] = await Promise.all([
+                        // APIリクエストを試行
+                        [usersRes, equipmentRes, reservationsRes] = await Promise.all([
                             trickleListObjects('user'),
                             trickleListObjects('equipment'),
                             trickleListObjects('reservation')
                         ]);
-
-                        // ユーザーデータ処理
-                        const sortedUsers = usersRes.items
-                            .map(item => item.objectData)
-                            .sort((a, b) => a.kana.localeCompare(b.kana, 'ja'));
-                        
-                        // ローカルで作成されたユーザーも追加
-                        if (window.localUserData && window.localUserData.length > 0) {
-                            sortedUsers.push(...window.localUserData);
-                            sortedUsers.sort((a, b) => a.kana.localeCompare(b.kana, 'ja'));
-                        }
-                        
-                        setUsers(sortedUsers);
-                        setEquipment(equipmentRes.items.map(item => item.objectData));
-                        setReservations(reservationsRes.items.map(item => item.objectData));
-                        
-                        // 過去予約の自動削除
-                        try {
-                            await removeOldReservations();
-                            const updatedReservations = await trickleListObjects('reservation');
-                            setReservations(updatedReservations.items.map(item => item.objectData));
-                        } catch (reservationError) {
-                            console.warn('過去予約削除エラー:', reservationError);
-                        }
                     } catch (apiError) {
-                        console.warn('API接続エラー、ローカルデータを使用します:', apiError);
-                        
-                        // API接続失敗時はローカルデータを使用
-                        // window.processedUsersは初期化で作成済み
-                        setUsers(window.processedUsers || []);
-                        
-                        // ローカルで作成されたユーザーも追加
-                        if (window.localUserData && window.localUserData.length > 0) {
-                            setUsers(prev => {
-                                const combined = [...prev, ...window.localUserData];
-                                return combined.sort((a, b) => a.kana.localeCompare(b.kana, 'ja'));
+                        console.error('API接続エラー:', apiError);
+                        // APIエラー時はフォールバックデータを使用
+                        usersRes = { items: [] };
+                        equipmentRes = { items: [] };
+                        reservationsRes = { items: [] };
+                    }
+
+                    // ユーザーデータの処理
+                    try {
+                        // 既存ユーザーをマップとして取得
+                        const existingUsers = new Map();
+                        if (usersRes.items && usersRes.items.length > 0) {
+                            usersRes.items.forEach(item => {
+                                if (item && item.objectData && item.objectData.kana) {
+                                    existingUsers.set(item.objectData.kana, item.objectData);
+                                }
                             });
                         }
                         
-                        // 備品と予約は空配列に
+                        // APIからのデータが空または不足している場合は初期データを使用
+                        if (existingUsers.size === 0) {
+                            // グローバル変数の初期ユーザーデータを使用
+                            const fallbackUsers = window.initialUsersData.map(user => ({
+                                id: 'fallback-' + Date.now() + Math.random().toString(36).substring(2, 5),
+                                ...user,
+                                isRemovable: true, // すべてのユーザーを削除可能に
+                                createdAt: new Date().toISOString()
+                            }));
+                            
+                            // ふりがなの５０音順でソート
+                            const sortedUsers = fallbackUsers.sort((a, b) => 
+                                a.kana.localeCompare(b.kana, 'ja')
+                            );
+                            setUsers(sortedUsers);
+                            console.log('フォールバックユーザーデータを使用:', sortedUsers.length);
+                        } else {
+                            // APIからのデータを使用
+                            const sortedUsers = usersRes.items
+                                .filter(item => item && item.objectData) // nullチェック
+                                .map(item => item.objectData)
+                                .sort((a, b) => a.kana.localeCompare(b.kana, 'ja'));
+                            setUsers(sortedUsers);
+                        }
+                    } catch (userError) {
+                        console.error('ユーザーデータ処理エラー:', userError);
+                        // エラー時は初期データを使用
+                        const fallbackUsers = window.initialUsersData.map(user => ({
+                            id: 'fallback-' + Date.now() + Math.random().toString(36).substring(2, 5),
+                            ...user,
+                            isRemovable: true,
+                            createdAt: new Date().toISOString()
+                        }));
+                        setUsers(fallbackUsers);
+                    }
+                    
+                    // 機器データの処理
+                    try {
+                        if (equipmentRes.items && equipmentRes.items.length > 0) {
+                            const validEquipment = equipmentRes.items
+                                .filter(item => item && item.objectData)
+                                .map(item => item.objectData);
+                            setEquipment(validEquipment);
+                        } else {
+                            // 機器データが空の場合のフォールバック
+                            setEquipment([]);
+                        }
+                    } catch (equipmentError) {
+                        console.error('機器データ処理エラー:', equipmentError);
                         setEquipment([]);
+                    }
+                    
+                    // 予約データの処理
+                    try {
+                        if (reservationsRes.items && reservationsRes.items.length > 0) {
+                            const validReservations = reservationsRes.items
+                                .filter(item => item && item.objectData)
+                                .map(item => item.objectData);
+                            setReservations(validReservations);
+                        } else {
+                            // 予約データが空の場合のフォールバック
+                            setReservations([]);
+                        }
+                    } catch (reservationError) {
+                        console.error('予約データ処理エラー:', reservationError);
                         setReservations([]);
                     }
+                    
                 } catch (error) {
-                    // 最後のフォールバック処理
-                    console.error('データ読み込みエラー:', error);
-                    setUsers(window.processedUsers || []);
+                    console.error('データ読み込み全体エラー:', error);
+                    // アラートは一度だけ表示
+                    alert('データ読み込みエラーが発生しましたが、アプリはオフラインモードで動作しています。\nオンライン接続時に再度お試しください。');
+                    
+                    // フォールバックデータを確実に設定
+                    const fallbackUsers = window.initialUsersData.map(user => ({
+                        id: 'fallback-' + Date.now() + Math.random().toString(36).substring(2, 5),
+                        ...user,
+                        isRemovable: true,
+                        createdAt: new Date().toISOString()
+                    }));
+                    setUsers(fallbackUsers);
                     setEquipment([]);
                     setReservations([]);
                 } finally {
@@ -173,43 +219,18 @@ function App() {
         // ユーザー追加
         const handleAddUser = async (newUser) => {
             try {
-                // 新規ユーザーデータに必要な属性を追加
-                const userData = {
+                const created = await trickleCreateObject('user', {
                     ...newUser,
-                    id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-                    createdAt: new Date().toISOString(),
-                    isRemovable: true // 必ず削除可能に設定
-                };
+                    id: Date.now().toString(),
+                    createdAt: new Date().toISOString()
+                });
 
-                try {
-                    // APIでの作成を試みる
-                    const created = await trickleCreateObject('user', userData);
-                    
-                    // 成功した場合、ユーザーリストに追加
-                    setUsers(prevUsers => {
-                        const updatedUsers = [...prevUsers, created.objectData];
-                        return updatedUsers.sort((a, b) => a.kana.localeCompare(b.kana, 'ja'));
-                    });
-                    
-                    alert('利用者を追加しました');
-                    return true;
-                } catch (apiError) {
-                    // APIエラーの場合、ローカルに保存して表示する
-                    console.warn('APIでの利用者登録に失敗しましたが、ローカルで対応します', apiError);
-                    
-                    // ローカルユーザーデータに追加
-                    if (!window.localUserData) window.localUserData = [];
-                    window.localUserData.push(userData);
-                    
-                    // UIに表示するために即座にユーザーリストを更新
-                    setUsers(prevUsers => {
-                        const updatedUsers = [...prevUsers, userData];
-                        return updatedUsers.sort((a, b) => a.kana.localeCompare(b.kana, 'ja'));
-                    });
-                    
-                    alert('利用者をローカルに追加しました（オフラインモード）');
-                    return true;
-                }
+                setUsers(prevUsers => {
+                    const updatedUsers = [...prevUsers, created.objectData];
+                    return updatedUsers.sort((a, b) => a.kana.localeCompare(b.kana, 'ja'));
+                });
+                
+                return true;
             } catch (error) {
                 console.error('ユーザー追加エラー:', error);
                 alert('ユーザーの追加に失敗しました: ' + error.message);
