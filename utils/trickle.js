@@ -2,7 +2,12 @@
 // バックエンドのAPIエンドポイントを呼び出す実装に置き換え
 
 // APIのベースURL（環境に応じて自動判別）
-const API_BASE_URL = window.location.hostname === 'localhost' ? 'http://localhost:3001/api' : '/api';
+const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+  ? `http://${window.location.hostname}:3001/api` 
+  : '/api';
+
+// 現在の実行環境をログ出力
+console.log(`現在の実行環境: ${window.location.hostname}, API URL: ${API_BASE_URL}`);
 
 // 管理者認証トークンの保存
 let adminToken = null;
@@ -17,18 +22,32 @@ async function trickleListObjects(type) {
     // オブジェクトタイプに基づいてエンドポイントを決定
     const endpoint = getEndpointForType(type);
     
-    // リクエスト失敗時のフォールバック処理を実装
-    let retries = 3;
+    // リクエスト失敗時のリトライ処理を実装
+    let retries = 5; // 最大5回に増やして信頼性を向上
     let response;
+    
+    // 現在アクセス中のAPI URLを記録
+    console.log(`${type}データ取得: ${API_BASE_URL}/${endpoint}にアクセス中`);
     
     while (retries > 0) {
       try {
-        // APIリクエスト実行
+        // APIリクエスト実行 - ヘッダーを改善
         response = await fetch(`${API_BASE_URL}/${endpoint}`, {
+          method: 'GET',
           headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          },
+          credentials: 'same-origin'
+        });
+        
+        // レスポンス情報を詳細に記録
+        console.log(`${type}データ取得結果:`, { 
+          status: response.status, 
+          statusText: response.statusText,
+          url: response.url
         });
         
         if (!response.ok) {
@@ -36,49 +55,36 @@ async function trickleListObjects(type) {
         }
         
         const data = await response.json();
+        // 取得成功時はデータ数をログ
+        console.log(`${type}データ取得成功: ${data.items ? data.items.length : 0}件`);
         return data;
       } catch (error) {
-        console.error(`${type}一覧取得エラー、リトライ中 (${retries}):`, error);
+        console.error(`${type}データ取得エラー (残り${retries}回):`, error);
         retries--;
         
         if (retries === 0) {
-          // リトライが尽きた場合はフォールバックデータを返す
-          if (type === 'user' && window.initialUsersData) {
-            console.log('ユーザーデータ取得失敗、初期データを使用します', window.initialUsersData);
-            // 初期データをそれぞれオブジェクトとして変換
-            const mockUsers = window.initialUsersData.map(userData => ({
-              objectId: `user_${userData.kana}_${Date.now()}`,
-              objectData: {
-                ...userData,
-                id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-                createdAt: new Date().toISOString(),
-                isRemovable: true
-              }
-            }));
-            return { items: mockUsers };
-          } else if (type === 'equipment') {
-            // 備品データのフォールバック
-            const mockEquipment = [
-              { name: 'iPad', count: 5 },
-              { name: 'ノートPC', count: 3 },
-              { name: 'プロジェクター', count: 2 }
-            ].map(eq => ({
-              objectId: `equipment_${eq.name}_${Date.now()}`,
-              objectData: {
-                ...eq,
-                id: `equipment_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-                createdAt: new Date().toISOString()
-              }
-            }));
-            return { items: mockEquipment };
-          } else if (type === 'reservation') {
-            // 空の予約リストのフォールバック
-            return { items: [] };
-          }
+          // 全リトライ失敗時の処理
+          console.error(`${type}データ取得失敗（リトライ回数上限）:`, error);
+          
+          // エラー詳細をコンソールに出力し、デバッグを容易に
+          console.error('エラー詳細情報:', {
+            エラータイプ: error.name,
+            メッセージ: error.message,
+            APIエンドポイント: `${API_BASE_URL}/${endpoint}`,
+            環境: window.location.hostname
+          });
+          
+          // アラートを表示
+          alert(`${type}データの取得に失敗しました。\nブラウザを再読み込みして再試行してください。\n\nエラー: ${error.message}`);
+          
+          // API失敗時はエラーをスロー - すべてのユーザーが同じ情報を共有するために必要
+          throw new Error(`${type}データの取得に失敗しました: ${error.message}`);
         }
         
-        // 次のリトライの前に少し待機
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // 指数関数的バックオフ (待機時間を応答的に増加)
+        const waitTime = 1000 * Math.pow(2, 5 - retries); // 1秒、2秒、4秒、8秒、16秒
+        console.log(`${waitTime}ミリ秒後に再試行します`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
       }
     }
   } catch (error) {
@@ -98,91 +104,23 @@ async function trickleCreateObject(type, data) {
     // オブジェクトタイプに基づいてエンドポイントを決定
     const endpoint = getEndpointForType(type);
     
-    try {
-      // APIリクエスト実行
-      const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache',
-          ...(adminToken && { 'Authorization': `Bearer ${adminToken}` })
-        },
-        body: JSON.stringify(data)
-      });
+    // APIリクエスト実行
+    const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(adminToken && { 'Authorization': `Bearer ${adminToken}` })
+      },
+      body: JSON.stringify(data)
+    });
     
-      if (!response.ok) {
-        throw new Error(`APIエラー: ${response.status}`);
-      }
-    
-      const result = await response.json();
-      return result;
-    } catch (apiError) {
-      // APIエラー時のフォールバック処理
-      console.warn(`${type}の作成時にAPIエラー発生、ローカル処理に切り替えます`, apiError);
-      
-      // 一意のIDを生成
-      const mockId = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      if (type === 'user') {
-        // ユーザーの場合はローカルに保存
-        const userData = {
-          ...data,
-          id: mockId,
-          createdAt: new Date().toISOString(),
-          isLocalOnly: true,
-          isRemovable: true
-        };
-        
-        // グローバル変数に追加してリストに表示できるようにする
-        if (!window.localUserData) window.localUserData = [];
-        window.localUserData.push(userData);
-        
-        // APIレスポンスの形式に合わせたレスポンスを返す
-        return {
-          objectId: mockId,
-          objectData: userData
-        };
-      }
-      
-      // 備品の場合
-      if (type === 'equipment') {
-        const equipmentData = {
-          ...data,
-          id: mockId,
-          createdAt: new Date().toISOString(),
-          isLocalOnly: true
-        };
-        
-        if (!window.localEquipmentData) window.localEquipmentData = [];
-        window.localEquipmentData.push(equipmentData);
-        
-        return {
-          objectId: mockId,
-          objectData: equipmentData
-        };
-      }
-      
-      // 予約の場合
-      if (type === 'reservation') {
-        const reservationData = {
-          ...data,
-          id: mockId,
-          createdAt: new Date().toISOString(),
-          isLocalOnly: true
-        };
-        
-        if (!window.localReservationData) window.localReservationData = [];
-        window.localReservationData.push(reservationData);
-        
-        return {
-          objectId: mockId,
-          objectData: reservationData
-        };
-      }
-      
-      throw apiError;
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || `APIエラー: ${response.status}`);
     }
+    
+    const result = await response.json();
+    return result;
   } catch (error) {
     console.error(`${type}作成エラー:`, error);
     throw error;
